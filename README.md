@@ -1,86 +1,120 @@
-# 🧩 MONet-Replication – Unsupervised Scene Decomposition
+# 💐 MONet-Replication – Modular Object-Centric Learning
 
-This repository is a **clean PyTorch reimplementation** of  
-**MONet: Unsupervised Scene Decomposition and Representation (Burgess et al., 2019)**.
+This repository provides a **PyTorch-based replication** of  
+**MONet: Unsupervised Scene Decomposition and Representation**.
 
-The goal is to turn the original paper’s **architecture, math, and block diagram** into a readable and modular codebase.
+The goal is to **understand and implement object-centric representation learning**  
+through recurrent attention and component-wise VAEs — not to chase SOTA numbers.
 
-- Recursive **attention-based object discovery** 🪞  
-- **Component-wise VAEs** for object modeling 🧬  
-- Full **ELBO objective** for generative training 🧠  
+- Decomposes scenes into **interpretable object slots** 🧿  
+- Uses **recurrent attention** to segment objects sequentially 🌀  
+- Learns **disentangled latent representations** per object 🧬  
+- Fully modular and easy to plug into vision research pipelines ⚙️  
 
-**Paper reference:** [Unsupervised Scene Decomposition and Representation](https://arxiv.org/abs/1901.11390) 📄
-
----
-
-## 🌠 Overview – How MONet Works
-
-MONet decomposes a scene into objects **one by one** using recursive attention.  
-Each object is modeled with its own VAE and the final image is composed from all parts.
-```text
-Input Image x (B, 3, H, W)
-        ⬇️
-CNN Encoder (feature maps)
-        ⬇️
-Attention Net αψ(x, scope)
-        ⬇️
-Recurrent Attention
-  - Generates masks m_k
-  - Updates scope
-        ⬇️
-Component-wise VAE (one per mask m_k)
-  - Encoder: qφ(z_k | x, m_k)
-  - Decoder: pθ(x | z_k)
-        ⬇️
-Mask Decoder pθ(c | {z_k})
-  - Predicts masks from latent slots
-        ⬇️
-Compositor
-  - Soft-masked summation: x̂ = Σ_k m_k * x_k
-        ⬇️
-Output:
-  - x̂       ← Reconstructed image
-  - masks   ← Attention masks
-  - z_slots ← Latent vectors
-  - mus, logvars ← Latent stats
-
-```
----
-
-## 🧮 Core Math
-
-### Recursive Attention
-```math
-m_k = s_k · σ(α_ψ(x, s_k))  
-s_{k+1} = s_k · (1 − m_k)
-```
-
-### Component-wise VAE
-```math
-q(z_k | x, m_k) = N(μ_k, σ_k²)  
-p(z_k) = N(0, I)
-```
-
-### Scene Reconstruction
-```math
-x̂ = Σ_k m_k · x_k
-```
-
-### ELBO Objective
-```math
-L = reconstruction + β · KL(z) + γ · KL(masks)
-```
+**Paper reference:** [MONet – Burgess et al., 2019](https://arxiv.org/abs/1901.11390) 📄
 
 ---
 
-## 🧠 What This Model Does
+## 🌌 Overview – MONet Pipeline
 
-- Decomposes scenes into **K object slots**  
-- Learns **unsupervised object masks**  
-- Trains with a **full probabilistic generative model**  
-- Produces object-level latent representations  
+![MONet Overview](images/figmix.jpg)
 
-This is MONet exactly as described in the paper — just turned into PyTorch.
+MONet decomposes an image into a set of object-centric latent variables by iteratively attending to different regions of the scene.
+
+Core idea:
+
+> Sequentially attend to different parts of the image, encode each region with a VAE, and reconstruct the scene by softly composing object reconstructions.
+
+High-level process:
+
+1. Extract image features using a CNN encoder.
+2. Generate an attention mask using a recurrent attention network.
+3. Encode the masked region into a latent variable.
+4. Decode each latent into an object reconstruction.
+5. Soft-compose all object reconstructions into the final image.
+
+---
+
+## 🔍 Model Structure
+
+The model consists of two main components:
+
+### 1. Recurrent Attention Network
+
+Generates a sequence of soft masks that decompose the image into object regions.
+
+At step $k$:
+
+$$
+m_k = \alpha_\psi(x, s_{k-1})
+$$
+
+Where:
+- $m_k$ is the attention mask
+- $\alpha_\psi$ is the attention network
+- $s_{k-1}$ is the remaining unexplained scope
+
+The scope is updated as:
+
+$$
+s_k = s_{k-1} \cdot (1 - m_k)
+$$
+
+
+### 2. Component-wise VAE
+
+Each mask is used to encode and decode a single object:
+
+Encoder:
+
+$$
+q_\phi(z_k | x, m_k)
+$$
+
+Decoder:
+
+$$
+p_\theta(x_k | z_k)
+$$
+
+Reconstruction is performed via soft composition:
+
+$$
+\hat{x} = \sum_k m_k \cdot x_k
+$$
+
+---
+
+## 🧮 Training Objective – MONet ELBO
+
+The full model is trained by maximizing the Evidence Lower Bound:
+
+```math
+\mathcal{L} =
+\sum_k \mathbb{E}_{q_\phi(z_k \mid x, m_k)}[\log p_\theta(x \mid z_k, m_k)]
+- \beta \, \mathrm{KL}(q_\phi(z_k \mid x, m_k) \Vert p(z_k))
++ \lambda \, \mathcal{L}_{mask}
+```
+
+Where:
+- Reconstruction likelihood is Gaussian
+- Prior $p(z)$ is standard normal
+- Mask loss enforces partitioning consistency
+- $\beta$ controls disentanglement strength
+
+---
+
+## 🧠 What the Model Learns
+
+- Object-centric latent slots instead of global embeddings  
+- Unsupervised segmentation through attention  
+- Disentangled representations per object  
+- Scene decomposition without labels  
+
+This makes MONet a foundation model for:
+- Object-based reasoning  
+- Compositional generalization  
+- Interpretable vision systems  
 
 ---
 
@@ -116,6 +150,10 @@ MONet-Replication/
 │   │
 │   └── config.py                   # slots, latent_dim, image_size
 │
+│
+│
+├── images/
+│   └── figmix.jpg               # MONet overview figure
 │
 ├── requirements.txt
 └── README.md
